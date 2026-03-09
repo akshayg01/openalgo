@@ -285,7 +285,7 @@ if not exist "%OPENALGO_DIR%\%ENV_FILE%" (
     echo.
 )
 
-REM Create db, strategies, and log directories if not exist
+REM Create db, strategies, log, keys, and tmp directories if not exist
 if not exist "%OPENALGO_DIR%\db\" (
     echo [INFO] Creating database directory...
     md "%OPENALGO_DIR%\db" 2>nul
@@ -301,6 +301,14 @@ if not exist "%OPENALGO_DIR%\log\" (
     md "%OPENALGO_DIR%\log" 2>nul
     md "%OPENALGO_DIR%\log\strategies" 2>nul
 )
+if not exist "%OPENALGO_DIR%\keys\" (
+    echo [INFO] Creating keys directory...
+    md "%OPENALGO_DIR%\keys" 2>nul
+)
+if not exist "%OPENALGO_DIR%\tmp\" (
+    echo [INFO] Creating temp directory...
+    md "%OPENALGO_DIR%\tmp" 2>nul
+)
 
 REM Pull latest image
 echo [INFO] Pulling latest image...
@@ -313,15 +321,26 @@ REM Stop and remove existing container if exists
 docker stop %CONTAINER% >nul 2>&1
 docker rm %CONTAINER% >nul 2>&1
 
+REM Calculate dynamic shm_size based on available RAM (25% of total, min 256m, max 2g)
+for /f "tokens=2 delims==" %%i in ('wmic computersystem get TotalPhysicalMemory /value ^| findstr TotalPhysicalMemory') do set TOTAL_RAM_BYTES=%%i
+set /a TOTAL_RAM_MB=%TOTAL_RAM_BYTES:~0,-6%
+set /a SHM_SIZE_MB=%TOTAL_RAM_MB% / 4
+if %SHM_SIZE_MB% LSS 256 set SHM_SIZE_MB=256
+if %SHM_SIZE_MB% GTR 2048 set SHM_SIZE_MB=2048
+echo [INFO] System RAM: %TOTAL_RAM_MB%MB, SHM size: %SHM_SIZE_MB%MB
+
 REM Run container
 echo [INFO] Starting container...
 docker run -d ^
     --name %CONTAINER% ^
+    --shm-size=%SHM_SIZE_MB%m ^
     -p 5000:5000 ^
     -p 8765:8765 ^
     -v "%OPENALGO_DIR%\db:/app/db" ^
     -v "%OPENALGO_DIR%\strategies:/app/strategies" ^
     -v "%OPENALGO_DIR%\log:/app/log" ^
+    -v "%OPENALGO_DIR%\keys:/app/keys" ^
+    -v "%OPENALGO_DIR%\tmp:/app/tmp" ^
     -v "%OPENALGO_DIR%\.env:/app/.env:ro" ^
     --restart unless-stopped ^
     %IMAGE%

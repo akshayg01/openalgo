@@ -338,7 +338,7 @@ do_start() {
         echo ""
     fi
 
-    # Create db, strategies, and log directories if not exist
+    # Create db, strategies, log, keys, and tmp directories if not exist
     if [ ! -d "$OPENALGO_DIR/db" ]; then
         log_info "Creating database directory..."
         mkdir -p "$OPENALGO_DIR/db"
@@ -352,6 +352,14 @@ do_start() {
         log_info "Creating log directory..."
         mkdir -p "$OPENALGO_DIR/log/strategies"
     fi
+    if [ ! -d "$OPENALGO_DIR/keys" ]; then
+        log_info "Creating keys directory..."
+        mkdir -p "$OPENALGO_DIR/keys"
+    fi
+    if [ ! -d "$OPENALGO_DIR/tmp" ]; then
+        log_info "Creating temp directory..."
+        mkdir -p "$OPENALGO_DIR/tmp"
+    fi
 
     # Pull latest image
     log_info "Pulling latest image..."
@@ -363,15 +371,30 @@ do_start() {
     docker stop "$CONTAINER" >/dev/null 2>&1
     docker rm "$CONTAINER" >/dev/null 2>&1
 
+    # Calculate dynamic shm_size based on available RAM (25% of total, min 256m, max 2g)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        TOTAL_RAM_MB=$(($(sysctl -n hw.memsize) / 1024 / 1024))
+    else
+        TOTAL_RAM_MB=$(($(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024))
+    fi
+    SHM_SIZE_MB=$((TOTAL_RAM_MB / 4))
+    # Clamp between 256MB and 2048MB
+    [ $SHM_SIZE_MB -lt 256 ] && SHM_SIZE_MB=256
+    [ $SHM_SIZE_MB -gt 2048 ] && SHM_SIZE_MB=2048
+    log_info "System RAM: ${TOTAL_RAM_MB}MB, SHM size: ${SHM_SIZE_MB}MB"
+
     # Run container
     log_info "Starting container..."
     if docker run -d \
         --name "$CONTAINER" \
+        --shm-size=${SHM_SIZE_MB}m \
         -p 5000:5000 \
         -p 8765:8765 \
         -v "$OPENALGO_DIR/db:/app/db" \
         -v "$OPENALGO_DIR/strategies:/app/strategies" \
         -v "$OPENALGO_DIR/log:/app/log" \
+        -v "$OPENALGO_DIR/keys:/app/keys" \
+        -v "$OPENALGO_DIR/tmp:/app/tmp" \
         -v "$OPENALGO_DIR/.env:/app/.env:ro" \
         --restart unless-stopped \
         "$IMAGE"; then

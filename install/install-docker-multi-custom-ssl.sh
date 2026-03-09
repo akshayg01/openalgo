@@ -429,6 +429,14 @@ done
 
 log "\n=== Starting Deployment ===" "$BLUE"
 
+# Calculate dynamic shm_size based on available RAM (25% of total, min 256m, max 2g)
+TOTAL_RAM_MB=$(($(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024))
+SHM_SIZE_MB=$((TOTAL_RAM_MB / 4))
+# Clamp between 256MB and 2048MB
+[ $SHM_SIZE_MB -lt 256 ] && SHM_SIZE_MB=256
+[ $SHM_SIZE_MB -gt 2048 ] && SHM_SIZE_MB=2048
+log "System RAM: ${TOTAL_RAM_MB}MB, SHM size: ${SHM_SIZE_MB}MB" "$BLUE"
+
 # Base Dir
 mkdir -p "$INSTALL_BASE"
 chmod 755 "$INSTALL_BASE"
@@ -755,10 +763,30 @@ for i in "${!CONF_DOMAINS[@]}"; do
         # Only update connectivity settings if needed (in case domain changed)
         # These are safe to update without breaking authentication
         sed -i "s|WEBSOCKET_URL='.*'|WEBSOCKET_URL='wss://$DOMAIN/ws'|g" "$ENV_FILE"
-        sed -i "s|CORS_ALLOWED_ORIGINS = '.*'|CORS_ALLOWED_ORIGINS = 'https://$DOMAIN'|g" "$ENV_FILE"
-        sed -i "s|CSP_CONNECT_SRC = \"'self'.*\"|CSP_CONNECT_SRC = \"'self' wss://$DOMAIN https://$DOMAIN wss: ws: https://cdn.socket.io\"|g" "$ENV_FILE"
         
-        log "Updated connectivity settings only" "$GREEN"
+        # CORS: Add domain if not already present (preserves custom domains like chart.domain.com)
+        # NOTE: Flask-CORS expects comma-separated origins (see cors.py line 25)
+        if ! grep "CORS_ALLOWED_ORIGINS" "$ENV_FILE" | grep -q "https://$DOMAIN"; then
+            # Extract current CORS value and append new domain with comma
+            CURRENT_CORS=$(grep "CORS_ALLOWED_ORIGINS" "$ENV_FILE" | sed "s/.*= '\\(.*\\)'/\\1/")
+            if [ -n "$CURRENT_CORS" ]; then
+                NEW_CORS="$CURRENT_CORS,https://$DOMAIN"
+                # Remove duplicates while preserving comma format
+                NEW_CORS=$(echo "$NEW_CORS" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+                sed -i "s|CORS_ALLOWED_ORIGINS = '.*'|CORS_ALLOWED_ORIGINS = '$NEW_CORS'|g" "$ENV_FILE"
+            fi
+        fi
+        
+        # CSP: Add domain if not already present (preserves custom domains)
+        if ! grep "CSP_CONNECT_SRC" "$ENV_FILE" | grep -q "https://$DOMAIN"; then
+            CURRENT_CSP=$(grep "CSP_CONNECT_SRC" "$ENV_FILE" | sed 's/.*= "\\(.*\\)"/\\1/')
+            if [ -n "$CURRENT_CSP" ] && ! echo "$CURRENT_CSP" | grep -q "https://$DOMAIN"; then
+                NEW_CSP="$CURRENT_CSP https://$DOMAIN wss://$DOMAIN"
+                sed -i "s|CSP_CONNECT_SRC = \".*\"|CSP_CONNECT_SRC = \"$NEW_CSP\"|g" "$ENV_FILE"
+            fi
+        fi
+        
+        log "Updated connectivity settings (preserved custom domains)" "$GREEN"
     else
         log "Creating new .env configuration..." "$YELLOW"
         cp "$INSTANCE_DIR/.sample.env" "$ENV_FILE"
@@ -804,33 +832,35 @@ services:
       - "127.0.0.1:${WS_PORT}:8765"
     volumes:
       - openalgo_db:/app/db
-      - openalgo_logs:/app/logs
       - openalgo_log:/app/log
       - openalgo_strategies:/app/strategies
       - openalgo_keys:/app/keys
+      - openalgo_tmp:/app/tmp
       - ./.env:/app/.env:ro
     environment:
       - FLASK_ENV=production
       - FLASK_DEBUG=0
       - APP_MODE=standalone
       - TZ=Asia/Kolkata
+    shm_size: '${SHM_SIZE_MB}m'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/login"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/auth/check-setup"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
     restart: unless-stopped
 
 volumes:
   openalgo_db:
-    driver: local
-  openalgo_logs:
     driver: local
   openalgo_log:
     driver: local
   openalgo_strategies:
     driver: local
   openalgo_keys:
+    driver: local
+  openalgo_tmp:
     driver: local
 EOF
 
@@ -917,6 +947,7 @@ EOF
     
     # 8. Service Start
     log "Starting Container for $DOMAIN..." "$BLUE"
+    log "Building Docker image (includes automated frontend build, may take 2-5 minutes)..." "$YELLOW"
     cd "$INSTANCE_DIR"
     docker compose build
     docker compose up -d
