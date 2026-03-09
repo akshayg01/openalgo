@@ -1,0 +1,9 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "FLASK_HOST_IP=0.0.0.0 FLASK_PORT=$PORT WEBSOCKET_HOST=0.0.0.0 uv run python app.py"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "on-failure"
+restartPolicyMaxRetries = 3
