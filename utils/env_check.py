@@ -164,14 +164,23 @@ def check_env_version_compatibility():
             print("🔴 " + "=" * 68)
 
             # Give user a chance to continue anyway
-            try:
-                response = input("\n⚠️  Continue anyway? (y/N): ").lower().strip()
-                if response not in ["y", "yes"]:
-                    print("\nApplication startup cancelled. Please update your .env file.")
+            # In non-interactive environments (Railway, Docker, CI), auto-continue
+            is_interactive = sys.stdin.isatty()
+            is_cloud_env = bool(
+                os.environ.get("RAILWAY_ENVIRONMENT")
+                or os.environ.get("RAILWAY_SERVICE_NAME")
+            )
+            if not is_interactive or is_cloud_env:
+                print("\n⚠️  Non-interactive environment detected. Continuing with outdated config...")
+            else:
+                try:
+                    response = input("\n⚠️  Continue anyway? (y/N): ").lower().strip()
+                    if response not in ["y", "yes"]:
+                        print("\nApplication startup cancelled. Please update your .env file.")
+                        return False
+                except (KeyboardInterrupt, EOFError):
+                    print("\nApplication startup cancelled.")
                     return False
-            except (KeyboardInterrupt, EOFError):
-                print("\nApplication startup cancelled.")
-                return False
 
         elif env_ver > sample_ver:
             print(f"\n✅ Your .env version ({env_version}) is newer than sample ({sample_version})")
