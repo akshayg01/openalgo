@@ -34,7 +34,7 @@ else
         cat > "$ENV_FILE" << EOF
 # OpenAlgo Environment Configuration File
 # Auto-generated from environment variables
-ENV_CONFIG_VERSION = '${ENV_CONFIG_VERSION:-1.0.4}'
+ENV_CONFIG_VERSION = '${ENV_CONFIG_VERSION:-1.0.6}'
 
 # Broker Configuration
 BROKER_API_KEY = '${BROKER_API_KEY}'
