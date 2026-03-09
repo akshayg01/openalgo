@@ -52,7 +52,19 @@
       "Bash(uv sync:*)",
       "Bash(gh pr view:*)",
       "Bash(gh pr diff:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "mcp__railway__get-logs",
+      "Bash(railway status:*)",
+      "Bash(railway login:*)",
+      "Bash(railway link:*)",
+      "mcp__railway__list-projects",
+      "Bash(railway logs:*)",
+      "mcp__railway__list-variables",
+      "Bash(railway variables:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "openalgo"
+  ]
 }
