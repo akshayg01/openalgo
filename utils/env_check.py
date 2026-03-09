@@ -15,6 +15,10 @@ def check_env_version_compatibility():
 
     # Check if both files exist
     if not os.path.exists(env_path):
+        # If running in a cloud/container environment (e.g. Railway), env vars may be
+        # injected directly without a .env file — skip version check and continue.
+        if os.environ.get("APP_KEY") or os.environ.get("RAILWAY_ENVIRONMENT"):
+            return True
         print("\nError: .env file not found.")
         print("Solution: Copy .sample.env to .env and configure your settings")
         return False
@@ -128,14 +132,15 @@ def load_and_check_env_variables():
     # Define the path to the .env file in the main application path
     env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
 
-    # Check if the .env file exists
-    if not os.path.exists(env_path):
+    # Load environment variables from the .env file if it exists.
+    # In cloud/container environments (e.g. Railway), variables are injected directly
+    # and a .env file may not be present — that is acceptable.
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=True)
+    elif not (os.environ.get("APP_KEY") or os.environ.get("RAILWAY_ENVIRONMENT")):
         print("Error: .env file not found at the expected location.")
         print("\nSolution: Copy .sample.env to .env and configure your settings")
         sys.exit(1)
-
-    # Load environment variables from the .env file with override=True to ensure values are updated
-    load_dotenv(dotenv_path=env_path, override=True)
 
     # Define the required environment variables
     required_vars = [
