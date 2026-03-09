@@ -191,6 +191,16 @@ export PYTHONDONTWRITEBYTECODE=1
 cd /app
 
 # ============================================
+# EXPORT DATABASE URLs FOR MIGRATION SCRIPTS
+# ============================================
+# Migration scripts run as subprocesses and read DATABASE_URL via os.getenv().
+# These vars must be exported as shell env vars (not just written to .env).
+export DATABASE_URL="${DATABASE_URL:-sqlite:///db/openalgo.db}"
+export LOGS_DATABASE_URL="${LOGS_DATABASE_URL:-sqlite:///db/logs.db}"
+export SANDBOX_DATABASE_URL="${SANDBOX_DATABASE_URL:-sqlite:///db/sandbox.db}"
+export LATENCY_DATABASE_URL="${LATENCY_DATABASE_URL:-sqlite:///db/latency.db}"
+
+# ============================================
 # DATABASE MIGRATIONS
 # ============================================
 # Run migrations automatically on startup (idempotent - safe to run multiple times)
