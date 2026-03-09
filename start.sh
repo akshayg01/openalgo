@@ -241,8 +241,8 @@ APP_PORT="${PORT:-5000}"
 
 echo "[OpenAlgo] Starting application on port ${APP_PORT} with eventlet..."
 
-# Create gunicorn worker temp directory (must be inside container, not mounted volume)
-mkdir -p /tmp/gunicorn_workers
+# Use /app/tmp for gunicorn worker temp dir (owned by appuser, guaranteed writable)
+mkdir -p /app/tmp/gunicorn
 
 exec /app/.venv/bin/gunicorn \
     --worker-class eventlet \
@@ -250,6 +250,6 @@ exec /app/.venv/bin/gunicorn \
     --bind 0.0.0.0:${APP_PORT} \
     --timeout 300 \
     --graceful-timeout 30 \
-    --worker-tmp-dir /tmp/gunicorn_workers \
+    --worker-tmp-dir /app/tmp/gunicorn \
     --log-level warning \
     app:app
